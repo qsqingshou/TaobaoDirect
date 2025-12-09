@@ -64,6 +64,27 @@ static BOOL isTaobaoJumpEnabled() {
 
 - (void)onLongTouch {
     NSLog(@"[TaobaoJump] 👆 检测到长按");
+    
+    if (!isTaobaoJumpEnabled()) {
+        %orig;
+        return;
+    }
+    
+    // 尝试直接获取消息内容
+    if ([self respondsToSelector:@selector(m_viewModel)]) {
+        id viewModel = [self performSelector:@selector(m_viewModel)];
+        if (viewModel && [viewModel respondsToSelector:@selector(messageWrap)]) {
+            id msgWrap = [viewModel performSelector:@selector(messageWrap)];
+            if (msgWrap && [msgWrap respondsToSelector:@selector(m_nsContent)]) {
+                NSString *content = [msgWrap performSelector:@selector(m_nsContent)];
+                if (content && content.length > 0) {
+                    g_currentMessageContent = content;
+                    NSLog(@"[TaobaoJump] 📝 从 onLongTouch 捕获消息: %@", content);
+                }
+            }
+        }
+    }
+    
     %orig;
 }
 
