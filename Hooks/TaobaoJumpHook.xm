@@ -157,36 +157,46 @@ static TaobaoJumpHandler *g_taobaoHandler = nil;
             g_taobaoHandler = [[TaobaoJumpHandler alloc] init];
         }
         
-        // 尝试用第一个菜单项的类来创建新菜单项
+        // 尝试用正确的初始化方法创建菜单项
         if (items.count > 0) {
-            id firstItem = items[0];
-            Class itemClass = [firstItem class];
+            Class itemClass = %c(MMMenuItem);
             
-            // 创建一个新的菜单项对象
-            id taobaoItem = [[itemClass alloc] init];
-            
-            // 尝试设置各种可能的属性
-            if ([taobaoItem respondsToSelector:@selector(setM_nsTitle:)]) {
-                [taobaoItem performSelector:@selector(setM_nsTitle:) withObject:@"跳转淘宝"];
-                NSLog(@"[TaobaoJump] ✅ 设置 m_nsTitle");
-            }
-            if ([taobaoItem respondsToSelector:@selector(setM_uiTarget:)]) {
-                [taobaoItem performSelector:@selector(setM_uiTarget:) withObject:g_taobaoHandler];
-                NSLog(@"[TaobaoJump] ✅ 设置 m_uiTarget");
-            }
-            if ([taobaoItem respondsToSelector:@selector(setM_selectorName:)]) {
-                [taobaoItem performSelector:@selector(setM_selectorName:) withObject:NSStringFromSelector(@selector(jumpToTaobao))];
-                NSLog(@"[TaobaoJump] ✅ 设置 m_selectorName");
+            // 确保 handler 存在
+            if (!g_taobaoHandler) {
+                g_taobaoHandler = [[TaobaoJumpHandler alloc] init];
             }
             
-            // 在第一个位置插入菜单项
-            [newItems insertObject:taobaoItem atIndex:0];
-            NSLog(@"[TaobaoJump] ✅ 成功添加淘宝跳转菜单项，新菜单项数: %lu", (unsigned long)newItems.count);
+            id taobaoItem = nil;
             
-            // 调用原始方法，传入新的菜单项数组
-            %orig(newItems);
+            // 尝试方法1: initWithTitle:icon:target:action:
+            if ([itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) {
+                taobaoItem = [[itemClass alloc] initWithTitle:@"跳转淘宝" 
+                                                         icon:nil 
+                                                       target:g_taobaoHandler 
+                                                       action:@selector(jumpToTaobao)];
+                NSLog(@"[TaobaoJump] ✅ 使用 initWithTitle:icon:target:action: 创建");
+            }
+            // 尝试方法2: initWithTitle:target:action:
+            else if ([itemClass instancesRespondToSelector:@selector(initWithTitle:target:action:)]) {
+                taobaoItem = [[itemClass alloc] initWithTitle:@"跳转淘宝" 
+                                                       target:g_taobaoHandler 
+                                                       action:@selector(jumpToTaobao)];
+                NSLog(@"[TaobaoJump] ✅ 使用 initWithTitle:target:action: 创建");
+            }
+            
+            if (taobaoItem) {
+                // 在第一个位置插入菜单项
+                [newItems insertObject:taobaoItem atIndex:0];
+                NSLog(@"[TaobaoJump] ✅ 成功添加淘宝跳转菜单项，新菜单项数: %lu", (unsigned long)newItems.count);
+                
+                // 调用原始方法，传入新的菜单项数组
+                %orig(newItems);
+            } else {
+                NSLog(@"[TaobaoJump] ❌ 无法创建菜单项");
+                %orig;
+            }
         } else {
-            NSLog(@"[TaobaoJump] ❌ 没有原始菜单项，无法创建");
+            NSLog(@"[TaobaoJump] ❌ 没有原始菜单项");
             %orig;
         }
     } @catch (NSException *exception) {
