@@ -184,16 +184,23 @@ static TaobaoJumpHandler *g_taobaoHandler = nil;
             
             // 尝试方法1: initWithTitle:icon:target:action:
             if ([itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) {
-                // 尝试创建一个图标（使用系统图标或第一个菜单项的图标）
-                id icon = nil;
-                if (items.count > 0) {
-                    id firstItem = items[0];
-                    if ([firstItem respondsToSelector:@selector(m_image)]) {
-                        icon = [firstItem performSelector:@selector(m_image)];
-                    }
+                // 创建购物车图标（使用 emoji 作为图标）
+                UIImage *icon = nil;
+                
+                // 尝试创建一个带购物车 emoji 的图片
+                @try {
+                    UIGraphicsBeginImageContextWithOptions(CGSizeMake(30, 30), NO, 0.0);
+                    NSDictionary *attributes = @{
+                        NSFontAttributeName: [UIFont systemFontOfSize:24],
+                    };
+                    [@"🛒" drawAtPoint:CGPointMake(3, 1) withAttributes:attributes];
+                    icon = UIGraphicsGetImageFromCurrentImageContext();
+                    UIGraphicsEndImageContext();
+                } @catch (NSException *e) {
+                    NSLog(@"[TaobaoJump] ⚠️ 创建图标失败: %@", e);
                 }
                 
-                taobaoItem = [[itemClass alloc] initWithTitle:@"🛒 跳转淘宝" 
+                taobaoItem = [[itemClass alloc] initWithTitle:@"" 
                                                          icon:icon 
                                                        target:g_taobaoHandler 
                                                        action:@selector(jumpToTaobao)];
@@ -201,7 +208,7 @@ static TaobaoJumpHandler *g_taobaoHandler = nil;
             }
             // 尝试方法2: initWithTitle:target:action:
             else if ([itemClass instancesRespondToSelector:@selector(initWithTitle:target:action:)]) {
-                taobaoItem = [[itemClass alloc] initWithTitle:@"跳转淘宝" 
+                taobaoItem = [[itemClass alloc] initWithTitle:@"🛒" 
                                                        target:g_taobaoHandler 
                                                        action:@selector(jumpToTaobao)];
                 NSLog(@"[TaobaoJump] ✅ 使用 initWithTitle:target:action: 创建");
