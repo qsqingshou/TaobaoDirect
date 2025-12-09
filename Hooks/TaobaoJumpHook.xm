@@ -84,22 +84,35 @@ static BOOL isTaobaoJumpEnabled() {
     
     // 复制到剪贴板
     [[UIPasteboard generalPasteboard] setString:g_currentMessageContent];
+    NSLog(@"[TaobaoJump] ✅ 已复制到剪贴板");
     
-    // 打开淘宝
-    NSURL *taobaoURL = [NSURL URLWithString:@"taobao://"];
+    // 尝试多个淘宝 URL Scheme
+    NSArray *taobaoSchemes = @[
+        @"taobao://",           // 标准淘宝
+        @"tbopen://",           // 淘宝打开
+        @"com.taobao.taobao4iphone://", // 完整包名
+    ];
     
-    if ([[UIApplication sharedApplication] canOpenURL:taobaoURL]) {
-        [[UIApplication sharedApplication] openURL:taobaoURL 
+    BOOL opened = NO;
+    for (NSString *scheme in taobaoSchemes) {
+        NSURL *url = [NSURL URLWithString:scheme];
+        NSLog(@"[TaobaoJump] 🔍 尝试打开: %@", scheme);
+        
+        // 直接尝试打开，不检查 canOpenURL（因为可能被限制）
+        [[UIApplication sharedApplication] openURL:url 
                                            options:@{} 
                                  completionHandler:^(BOOL success) {
             if (success) {
-                NSLog(@"[TaobaoJump] ✅ 成功打开淘宝");
-            } else {
-                NSLog(@"[TaobaoJump] ❌ 打开淘宝失败");
+                NSLog(@"[TaobaoJump] ✅ 成功使用 %@ 打开淘宝", scheme);
             }
         }];
-    } else {
-        NSLog(@"[TaobaoJump] ❌ 无法打开淘宝 URL，请确认已安装淘宝");
+        
+        opened = YES;
+        break; // 只尝试第一个
+    }
+    
+    if (!opened) {
+        NSLog(@"[TaobaoJump] ❌ 无法打开淘宝");
     }
     
     // 清空消息内容
@@ -171,8 +184,17 @@ static TaobaoJumpHandler *g_taobaoHandler = nil;
             
             // 尝试方法1: initWithTitle:icon:target:action:
             if ([itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) {
-                taobaoItem = [[itemClass alloc] initWithTitle:@"跳转淘宝" 
-                                                         icon:nil 
+                // 尝试创建一个图标（使用系统图标或第一个菜单项的图标）
+                id icon = nil;
+                if (items.count > 0) {
+                    id firstItem = items[0];
+                    if ([firstItem respondsToSelector:@selector(m_image)]) {
+                        icon = [firstItem performSelector:@selector(m_image)];
+                    }
+                }
+                
+                taobaoItem = [[itemClass alloc] initWithTitle:@"🛒 跳转淘宝" 
+                                                         icon:icon 
                                                        target:g_taobaoHandler 
                                                        action:@selector(jumpToTaobao)];
                 NSLog(@"[TaobaoJump] ✅ 使用 initWithTitle:icon:target:action: 创建");
