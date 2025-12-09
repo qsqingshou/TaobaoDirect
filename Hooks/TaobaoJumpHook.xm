@@ -13,7 +13,8 @@
 
 // MMMenuItem - 微信菜单项类
 @interface MMMenuItem : NSObject
-+ (instancetype)itemWithTitle:(NSString *)title target:(id)target action:(SEL)action;
+- (instancetype)initWithTitle:(NSString *)title icon:(id)icon target:(id)target action:(SEL)action;
+- (instancetype)initWithTitle:(NSString *)title target:(id)target action:(SEL)action;
 @property (nonatomic, copy) NSString *title;
 @end
 
