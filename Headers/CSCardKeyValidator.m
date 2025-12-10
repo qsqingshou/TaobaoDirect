@@ -8,7 +8,7 @@ static NSString * const kWeiURL = @"http://wy.llua.cn";
 static NSString * const kWeiAID = @"11644";
 static NSString * const kWeiKEY = @"73758u537577i3t7";
 static NSString * const kRC4KEY = @"ElFlF870vDk88gef";
-static NSInteger const kDLCODE = 199;
+static NSInteger const kDLCODE = 200;
 
 // 本地存储Key
 static NSString * const kActivatedKey = @"com.wechat.tweak.cardkey.activated";
@@ -33,7 +33,7 @@ static NSString * const kExpireDateKey = @"com.wechat.tweak.cardkey.expiredate";
     NSTimeInterval timestamp = [[NSDate date] timeIntervalSince1970];
     NSInteger TIME = (NSInteger)timestamp;
     
-    // 生成VALUE
+    // 生成VALUE（用于二次校验）
     NSInteger VALUE = 1 + arc4random_uniform(10) + TIME;
     
     // 生成签名
@@ -41,10 +41,12 @@ static NSString * const kExpireDateKey = @"com.wechat.tweak.cardkey.expiredate";
                            cardKey, deviceID, (long)TIME, kWeiKEY];
     NSString *SIGN = [self md5:signString];
     
-    // 组装DATA
+    // 组装请求参数并加密
     NSString *dataString = [NSString stringWithFormat:@"kami=%@&markcode=%@&t=%ld&sign=%@&value=%ld",
                            cardKey, deviceID, (long)TIME, SIGN, (long)VALUE];
     NSString *encryptedData = [self rc4Encrypt:dataString key:kRC4KEY];
+    
+    NSLog(@"[卡密验证] 请求参数: kami=%@, markcode=%@, time=%ld, sign=%@, value=%ld", cardKey, deviceID, (long)TIME, SIGN, (long)VALUE);
     
     // 发起网络请求
     NSString *urlString = [NSString stringWithFormat:@"%@/api/?id=kmlogon&app=%@&data=%@", 
@@ -100,18 +102,25 @@ static NSString * const kExpireDateKey = @"com.wechat.tweak.cardkey.expiredate";
         
         // 检查响应码
         NSInteger code = [responseDict[@"code"] integerValue];
+        NSLog(@"[卡密验证] 响应码: %ld", (long)code);
         
         if (code == kDLCODE) {
             // 验证check值
             NSString *check = responseDict[@"check"];
-            NSString *time = responseDict[@"time"];
-            NSString *expectedCheck = [self md5:[NSString stringWithFormat:@"%@%@%ld", time, kWeiKEY, (long)VALUE]];
+            NSString *check2 = responseDict[@"check2"];
+            id timeObj = responseDict[@"time"];
+            NSString *timeStr = [NSString stringWithFormat:@"%@", timeObj];
+            
+            NSString *expectedCheck = [self md5:[NSString stringWithFormat:@"%@%@%ld", timeStr, kWeiKEY, (long)VALUE]];
+            NSLog(@"[卡密验证] check=%@, expectedCheck=%@, check2=%@", check, expectedCheck, check2);
             
             if ([check isEqualToString:expectedCheck]) {
                 // 验证成功，获取到期时间
                 NSDictionary *msg = responseDict[@"msg"];
                 NSTimeInterval vipTimestamp = [msg[@"vip"] doubleValue];
                 NSDate *expireDate = [NSDate dateWithTimeIntervalSince1970:vipTimestamp];
+                
+                NSLog(@"[卡密验证] 验证成功! 到期时间: %@", expireDate);
                 
                 // 保存激活状态
                 [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kActivatedKey];
@@ -124,6 +133,7 @@ static NSString * const kExpireDateKey = @"com.wechat.tweak.cardkey.expiredate";
                     }
                 });
             } else {
+                NSLog(@"[卡密验证] check校验失败");
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (completion) {
                         completion(NO, @"数据校验失败", nil);
@@ -132,20 +142,24 @@ static NSString * const kExpireDateKey = @"com.wechat.tweak.cardkey.expiredate";
             }
         } else {
             // 获取错误信息
-            NSString *errorMsg = responseDict[@"msg"];
-            if ([errorMsg isKindOfClass:[NSString class]]) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    if (completion) {
-                        completion(NO, errorMsg, nil);
-                    }
-                });
+            id msgObj = responseDict[@"msg"];
+            NSString *errorMsg;
+            
+            if ([msgObj isKindOfClass:[NSString class]]) {
+                errorMsg = (NSString *)msgObj;
+            } else if ([msgObj isKindOfClass:[NSDictionary class]]) {
+                errorMsg = @"卡密验证失败";
             } else {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    if (completion) {
-                        completion(NO, @"卡密验证失败", nil);
-                    }
-                });
+                errorMsg = [NSString stringWithFormat:@"验证失败(code:%ld)", (long)code];
             }
+            
+            NSLog(@"[卡密验证] 验证失败: %@", errorMsg);
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) {
+                    completion(NO, errorMsg, nil);
+                }
+            });
         }
     }];
     
