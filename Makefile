@@ -22,7 +22,8 @@ TARGET = iphone:clang:latest:15.0
 
 # 源文件
 WeChatEnhance_FILES = $(wildcard Hooks/*.xm) \
-                     $(wildcard Controllers/*.m) 
+                     $(wildcard Controllers/*.m) \
+                     Headers/CSCardKeyValidator.m 
 
 # 编译标志
 WeChatEnhance_CFLAGS = -fobjc-arc \

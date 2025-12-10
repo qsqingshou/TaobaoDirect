@@ -1,24 +1,12 @@
 #import "CSCustomViewController.h"
 #import "CSSettingTableViewCell.h"
 #import "CSUserInfoHelper.h"
-#import "CSAccountDetailViewController.h"
-#import "CSNavigationTitleSettingsViewController.h"
-#import "CSAvatarSettingsViewController.h"
 #import "CSBackgroundRunViewController.h"
-#import "CSTimeLineTailSettingsViewController.h"
-#import "CSTouchTrailViewController.h"
 #import "CSGameCheatsViewController.h"
-#import "CSFavoriteSettingsViewController.h"
-#import "CSWCEnhanceViewController.h"
-#import "CSUICleanViewController.h"
 #import "CSEntrySettingsViewController.h"
-#import "CSChatAttachmentSettingsViewController.h"
-#import "CSVersionSettingsViewController.h"
-#import "CSUpdateControlViewController.h"
-#import "CSMessageTimeSettingsViewController.h"
-#import "CSInputTextSettingsViewController.h"
 #import "CSResetSettingsViewController.h"
 #import "CSTaobaoJumpViewController.h"
+#import "CSCardKeyValidator.h"
 
 // UI 常量
 static CGFloat const kHeaderViewHeight = 150.0f;        // 头部视图高度
@@ -36,8 +24,8 @@ static CGFloat const kWXIDFontSize = 14.0f;            // 微信号字体大小
 
 // 头像缓存Key
 static NSString * const kAvatarCacheKey = @"com.wechat.tweak.avatar.cache";
-// 用户协议同意标记
-static NSString * const kUserAgreementAcceptedKey = @"com.wechat.tweak.user.agreement.accepted.v3";
+// 卡密激活标记（替代用户协议）
+static NSString * const kCardKeyActivatedKey = @"com.wechat.tweak.cardkey.activated.v1";
 
 @interface CSCustomViewController () <UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic, strong) UITableView *tableView;
@@ -80,152 +68,120 @@ static NSString * const kUserAgreementAcceptedKey = @"com.wechat.tweak.user.agre
     [self preloadAvatarImage];
 }
 
-// 添加viewDidAppear方法，在视图显示后检查用户协议
+// 添加viewDidAppear方法，在视图显示后检查卡密激活
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     
-    // 检查用户是否已同意使用声明
-    [self checkUserAgreement];
+    // 检查是否已激活
+    [self checkCardKeyActivation];
 }
 
-// 检查用户是否已同意使用声明
-- (void)checkUserAgreement {
-    BOOL hasAccepted = [[NSUserDefaults standardUserDefaults] boolForKey:kUserAgreementAcceptedKey];
-    if (!hasAccepted) {
-        // 如果用户尚未同意，显示声明弹窗
-        [self showUserAgreementAlert];
+// 检查卡密激活状态
+- (void)checkCardKeyActivation {
+    if (![CSCardKeyValidator isActivated]) {
+        // 如果未激活，显示卡密验证弹窗
+        [self showCardKeyAlert];
     }
 }
 
-// 显示用户协议弹窗
-- (void)showUserAgreementAlert {
-    // 使用UIAlertController创建弹窗
+// 显示卡密验证弹窗
+- (void)showCardKeyAlert {
     UIAlertController *alertController = [UIAlertController 
-                                          alertControllerWithTitle:@"用户使用声明" 
-                                          message:[self userAgreementText]
+                                          alertControllerWithTitle:@"激活插件" 
+                                          message:@"请输入卡密以激活插件\n\n卡密获取方式：\n联系开发者购买"
                                           preferredStyle:UIAlertControllerStyleAlert];
     
-    // 添加继续按钮 - 第一步只显示协议内容
-    self.continueAction = [UIAlertAction 
-                          actionWithTitle:@"请等待8秒" 
-                          style:UIAlertActionStyleDefault 
-                          handler:^(UIAlertAction * _Nonnull action) {
-        // 用户点击继续后，显示第二步确认界面
-        [self showAgreementConfirmAlert];
-    }];
-    
-    // 禁用继续按钮，倒计时后启用
-    self.continueAction.enabled = NO;
-    
-    [alertController addAction:self.continueAction];
-    
-    // 显示弹窗
-    [self presentViewController:alertController animated:YES completion:^{
-        // 弹窗显示后，开始倒计时
-        self.countdownSeconds = 8;
-        self.countdownTimer = [NSTimer scheduledTimerWithTimeInterval:1.0
-                                                              target:self
-                                                            selector:@selector(updateCountdown)
-                                                            userInfo:nil
-                                                             repeats:YES];
-    }];
-}
-
-// 更新倒计时
-- (void)updateCountdown {
-    self.countdownSeconds--;
-    
-    if (self.countdownSeconds <= 0) {
-        // 倒计时结束，停止计时器
-        [self.countdownTimer invalidate];
-        self.countdownTimer = nil;
-        
-        // 启用继续按钮
-        self.continueAction.enabled = YES;
-        
-        // 更新按钮标题
-        [self.continueAction setValue:@"继续" forKey:@"title"];
-    } else {
-        // 更新按钮标题，显示剩余时间
-        NSString *title = [NSString stringWithFormat:@"请等待%ld秒", (long)self.countdownSeconds];
-        [self.continueAction setValue:title forKey:@"title"];
-    }
-}
-
-// 显示确认输入界面 - 第二步
-- (void)showAgreementConfirmAlert {
-    UIAlertController *confirmAlert = [UIAlertController 
-                                       alertControllerWithTitle:@"确认同意" 
-                                       message:@"请输入\"我已阅读并同意\"以确认您已阅读并同意用户协议"
-                                       preferredStyle:UIAlertControllerStyleAlert];
-    
-    // 添加文本框，要求用户输入"我已阅读并同意"
-    [confirmAlert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"请输入\"我已阅读并同意\"";
+    // 添加卡密输入框
+    [alertController addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+        textField.placeholder = @"请输入卡密";
         textField.clearButtonMode = UITextFieldViewModeWhileEditing;
         textField.borderStyle = UITextBorderStyleRoundedRect;
     }];
     
-    // 添加同意按钮
-    UIAlertAction *agreeAction = [UIAlertAction 
-                                  actionWithTitle:@"确认" 
-                                  style:UIAlertActionStyleDefault 
-                                  handler:^(UIAlertAction * _Nonnull action) {
-        // 获取用户输入的文本
-        UITextField *textField = confirmAlert.textFields.firstObject;
-        NSString *userInput = textField.text;
+    // 添加激活按钮
+    UIAlertAction *activateAction = [UIAlertAction 
+                                    actionWithTitle:@"激活" 
+                                    style:UIAlertActionStyleDefault 
+                                    handler:^(UIAlertAction * _Nonnull action) {
+        UITextField *textField = alertController.textFields.firstObject;
+        NSString *cardKey = textField.text;
         
-        // 验证用户输入是否为"我已阅读并同意"
-        if ([userInput isEqualToString:@"我已阅读并同意"]) {
-            // 保存用户同意状态
-            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kUserAgreementAcceptedKey];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-        } else {
-            // 如果输入不正确，重新显示弹窗，并提示用户输入错误
-            UIAlertController *errorAlert = [UIAlertController
-                                             alertControllerWithTitle:@"输入错误"
-                                             message:@"请正确输入\"我已阅读并同意\"才能继续使用"
-                                             preferredStyle:UIAlertControllerStyleAlert];
-            
-            [errorAlert addAction:[UIAlertAction actionWithTitle:@"重试"
-                                                           style:UIAlertActionStyleDefault
-                                                         handler:^(UIAlertAction * _Nonnull action) {
-                // 重新显示确认界面
-                [self showAgreementConfirmAlert];
-            }]];
-            
-            [self presentViewController:errorAlert animated:YES completion:nil];
+        if (!cardKey || cardKey.length == 0) {
+            [self showErrorAlert:@"请输入卡密" retry:YES];
+            return;
         }
+        
+        // 显示加载提示
+        [self showLoadingAlert];
+        
+        // 验证卡密
+        [CSCardKeyValidator validateCardKey:cardKey completion:^(BOOL success, NSString *message, NSDate * _Nullable expireDate) {
+            [self dismissViewControllerAnimated:YES completion:^{
+                if (success) {
+                    // 格式化到期时间
+                    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+                    formatter.dateFormat = @"yyyy-MM-dd HH:mm:ss";
+                    NSString *expireDateString = [formatter stringFromDate:expireDate];
+                    
+                    NSString *successMessage = [NSString stringWithFormat:@"激活成功！\n\n到期时间：\n%@", expireDateString];
+                    [self showSuccessAlert:successMessage];
+                } else {
+                    [self showErrorAlert:message retry:YES];
+                }
+            }];
+        }];
     }];
     
-    // 添加返回按钮，返回到协议阅读界面
-    UIAlertAction *backAction = [UIAlertAction 
-                                actionWithTitle:@"返回" 
-                                style:UIAlertActionStyleDefault 
-                                handler:^(UIAlertAction * _Nonnull action) {
-        // 返回到协议阅读界面
-        [self showUserAgreementAlert];
-    }];
-    
-    [confirmAlert addAction:agreeAction];
-    [confirmAlert addAction:backAction];
+    [alertController addAction:activateAction];
     
     // 显示弹窗
-    [self presentViewController:confirmAlert animated:YES completion:nil];
+    [self presentViewController:alertController animated:YES completion:nil];
 }
 
-// 用户协议文本
-- (NSString *)userAgreementText {
-    return @"尊敬的用户：\n\n"
-           @"欢迎使用本微信插件功能。使用本插件前，请您仔细阅读以下声明：\n\n"
-           @"1. 本插件由愫茶开发，仅在Telegram频道发布。\n\n"
-           @"2. 二次发布必须保留原始开发者署名，改名干嘛？自己不会写啊？？\n\n"
-           @"3. 本插件仅供个人学习研究使用，不得用于任何商业用途。\n\n"
-           @"4. 严禁恶意改名盈利，所有未经授权进行商业用途的行为将被永久拉黑。\n\n"
-           @"5. 使用本插件可能违反微信软件的使用条款，可能导致您的微信账号被封禁或限制。\n\n"
-           @"6. 您应自行承担使用本插件的全部风险和法律责任，开发者不对因使用本插件导致的任何直接或间接损失负责。\n\n"
-           @"7. 严禁利用本插件从事任何违法违规活动，包括但不限于侵犯他人隐私、进行网络诈骗等。\n\n"
-           @"8. 开发者保留随时修改、中断或终止本插件的权利，无需事先通知。";
+// 显示加载提示
+- (void)showLoadingAlert {
+    UIAlertController *loadingAlert = [UIAlertController 
+                                       alertControllerWithTitle:@"正在验证" 
+                                       message:@"请稍候..."
+                                       preferredStyle:UIAlertControllerStyleAlert];
+    
+    [self presentViewController:loadingAlert animated:YES completion:nil];
+}
+
+// 显示成功提示
+- (void)showSuccessAlert:(NSString *)message {
+    UIAlertController *successAlert = [UIAlertController 
+                                       alertControllerWithTitle:@"激活成功" 
+                                       message:message
+                                       preferredStyle:UIAlertControllerStyleAlert];
+    
+    [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" 
+                                                     style:UIAlertActionStyleDefault 
+                                                   handler:nil]];
+    
+    [self presentViewController:successAlert animated:YES completion:nil];
+}
+
+// 显示错误提示
+- (void)showErrorAlert:(NSString *)message retry:(BOOL)retry {
+    UIAlertController *errorAlert = [UIAlertController 
+                                     alertControllerWithTitle:@"验证失败" 
+                                     message:message
+                                     preferredStyle:UIAlertControllerStyleAlert];
+    
+    if (retry) {
+        [errorAlert addAction:[UIAlertAction actionWithTitle:@"重试" 
+                                                       style:UIAlertActionStyleDefault 
+                                                     handler:^(UIAlertAction * _Nonnull action) {
+            [self showCardKeyAlert];
+        }]];
+    } else {
+        [errorAlert addAction:[UIAlertAction actionWithTitle:@"确定" 
+                                                       style:UIAlertActionStyleDefault 
+                                                     handler:nil]];
+    }
+    
+    [self presentViewController:errorAlert animated:YES completion:nil];
 }
 
 // 预加载头像图片
@@ -406,82 +362,15 @@ static NSString * const kUserAgreementAcceptedKey = @"com.wechat.tweak.user.agre
 }
 
 - (void)setupData {
-    // 账号与安全组
-    CSSettingItem *accountItem = [CSSettingItem itemWithTitle:@"账号信息" 
-                                                   iconName:@"person.crop.circle" 
-                                                  iconColor:[UIColor systemBlueColor]
-                                                    detail:nil];
-    
-    CSSettingSection *accountSection = [CSSettingSection sectionWithHeader:@"账号与安全" 
-                                                                   items:@[accountItem]];
-    
-    // 界面定制组
-    CSSettingItem *navigationTitleItem = [CSSettingItem itemWithTitle:@"顶栏信息" 
-                                                           iconName:@"text.aligncenter" 
-                                                          iconColor:[UIColor systemGreenColor]
-                                                            detail:nil];
-    
-    CSSettingItem *avatarItem = [CSSettingItem itemWithTitle:@"头像设置" 
-                                                  iconName:@"person.crop.square" 
-                                                 iconColor:[UIColor systemOrangeColor]
-                                                   detail:nil];
-    
-    CSSettingItem *touchTrailItem = [CSSettingItem itemWithTitle:@"触摸轨迹"
-                                                      iconName:@"hand.tap.fill"
-                                                     iconColor:[UIColor systemTealColor]
-                                                       detail:nil];
-    
-    // 添加界面简化项
-    CSSettingItem *enhanceUIItem = [CSSettingItem itemWithTitle:@"界面简化" 
-                                                       iconName:@"rectangle.grid.1x2" 
-                                                      iconColor:[UIColor systemIndigoColor]
-                                                        detail:nil];
-    
-    // 添加界面净化项
-    CSSettingItem *cleanUIItem = [CSSettingItem itemWithTitle:@"界面净化" 
-                                                   iconName:@"trash" 
-                                                  iconColor:[UIColor systemRedColor]
-                                                    detail:nil];
-    
-    CSSettingSection *uiSection = [CSSettingSection sectionWithHeader:@"界面定制"
-                                                              items:@[navigationTitleItem,
-                                                                     avatarItem,
-                                                                     touchTrailItem,
-                                                                     enhanceUIItem,
-                                                                     cleanUIItem]];
-    
     // 功能增强组
     CSSettingItem *backgroundRunItem = [CSSettingItem itemWithTitle:@"后台运行" 
                                                          iconName:@"arrow.clockwise.icloud" 
                                                         iconColor:[UIColor systemPurpleColor]
                                                           detail:nil];
     
-    CSSettingItem *timeLineTailItem = [CSSettingItem itemWithTitle:@"小尾巴呀"
-                                                        iconName:@"text.alignleft"
-                                                       iconColor:[UIColor systemPinkColor]
-                                                         detail:nil];
-    
     CSSettingItem *gameCheatsItem = [CSSettingItem itemWithTitle:@"游戏辅助"
                                                       iconName:@"gamecontroller.fill"
                                                      iconColor:[UIColor systemGreenColor]
-                                                       detail:nil];
-    
-    // 添加聊天按钮布局菜单项
-    CSSettingItem *chatAttachmentItem = [CSSettingItem itemWithTitle:@"附件布局"
-                                                          iconName:@"square.grid.2x2"
-                                                         iconColor:[UIColor systemTealColor]
-                                                           detail:nil];
-
-    // 添加信息时间设置项
-    CSSettingItem *messageTimeItem = [CSSettingItem itemWithTitle:@"信息时间"
-                                                        iconName:@"clock.fill"
-                                                       iconColor:[UIColor systemBlueColor]
-                                                         detail:nil];
-
-    // 添加聊天占位文本设置项
-    CSSettingItem *inputTextItem = [CSSettingItem itemWithTitle:@"文本占位"
-                                                      iconName:@"text.bubble.fill"
-                                                     iconColor:[UIColor systemPinkColor]
                                                        detail:nil];
 
     // 添加淘口令跳转设置项
@@ -492,30 +381,14 @@ static NSString * const kUserAgreementAcceptedKey = @"com.wechat.tweak.user.agre
 
     CSSettingSection *enhancementSection = [CSSettingSection sectionWithHeader:@"功能增强" 
                                                                       items:@[backgroundRunItem,
-                                                                             timeLineTailItem,
                                                                              gameCheatsItem,
-                                                                             chatAttachmentItem,
-                                                                             messageTimeItem,
-                                                                             inputTextItem,
                                                                              taobaoJumpItem]];
     
-    // 添加插件设置组
+    // 插件设置组
     CSSettingItem *entrySettingsItem = [CSSettingItem itemWithTitle:@"入口设置"
                                                          iconName:@"door.right.hand.open"
                                                         iconColor:[UIColor systemBrownColor]
                                                           detail:nil];
-    
-    // 添加版本控制项到插件设置组
-    CSSettingItem *versionControlItem = [CSSettingItem itemWithTitle:@"版本控制"
-                                                          iconName:@"gear.circle"
-                                                         iconColor:[UIColor systemIndigoColor]
-                                                           detail:nil];
-    
-    // 添加热更新控制项
-    CSSettingItem *updateControlItem = [CSSettingItem itemWithTitle:@"更新控制"
-                                                          iconName:@"xmark.shield.fill"
-                                                         iconColor:[UIColor systemRedColor]
-                                                           detail:nil];
     
     // 添加重置设置项
     CSSettingItem *resetSettingsItem = [CSSettingItem itemWithTitle:@"重置设置"
@@ -525,8 +398,6 @@ static NSString * const kUserAgreementAcceptedKey = @"com.wechat.tweak.user.agre
     
     CSSettingSection *pluginSection = [CSSettingSection sectionWithHeader:@"插件设置"
                                                                  items:@[entrySettingsItem, 
-                                                                        versionControlItem,
-                                                                        updateControlItem,
                                                                         resetSettingsItem]];
     
     // 关于组
@@ -538,7 +409,7 @@ static NSString * const kUserAgreementAcceptedKey = @"com.wechat.tweak.user.agre
     CSSettingSection *aboutSection = [CSSettingSection sectionWithHeader:@"关于"
                                                                  items:@[versionItem]];
     
-    self.sections = @[accountSection, uiSection, enhancementSection, pluginSection, aboutSection];
+    self.sections = @[enhancementSection, pluginSection, aboutSection];
 }
 
 - (void)setupUI {
@@ -600,85 +471,25 @@ static NSString * const kUserAgreementAcceptedKey = @"com.wechat.tweak.user.agre
     
     // 根据item类型和标题处理不同的点击事件
     if (item.itemType == CSSettingItemTypeNormal) {
-        // 处理账号信息点击
-        if ([item.title isEqualToString:@"账号信息"]) {
-            CSAccountDetailViewController *detailVC = [[CSAccountDetailViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:detailVC animated:YES];
-        }
-        // 处理顶栏信息点击
-        else if ([item.title isEqualToString:@"顶栏信息"]) {
-            CSNavigationTitleSettingsViewController *settingsVC = [[CSNavigationTitleSettingsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:settingsVC animated:YES];
-        }
-        // 处理头像设置点击
-        else if ([item.title isEqualToString:@"头像设置"]) {
-            CSAvatarSettingsViewController *avatarVC = [[CSAvatarSettingsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:avatarVC animated:YES];
-        }
         // 处理后台运行点击
-        else if ([item.title isEqualToString:@"后台运行"]) {
+        if ([item.title isEqualToString:@"后台运行"]) {
             CSBackgroundRunViewController *backgroundVC = [[CSBackgroundRunViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
             [self.navigationController pushViewController:backgroundVC animated:YES];
-        }
-        // 处理朋友圈后缀点击
-        else if ([item.title isEqualToString:@"小尾巴呀"]) {
-            CSTimeLineTailSettingsViewController *timeLineTailVC = [[CSTimeLineTailSettingsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:timeLineTailVC animated:YES];
-        }
-        // 处理触摸轨迹点击
-        else if ([item.title isEqualToString:@"触摸轨迹"]) {
-            CSTouchTrailViewController *touchTrailVC = [[CSTouchTrailViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:touchTrailVC animated:YES];
         }
         // 处理游戏辅助点击
         else if ([item.title isEqualToString:@"游戏辅助"]) {
             CSGameCheatsViewController *gameCheatsVC = [[CSGameCheatsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
             [self.navigationController pushViewController:gameCheatsVC animated:YES];
         }
-        // 处理界面简化点击
-        else if ([item.title isEqualToString:@"界面简化"]) {
-            CSWCEnhanceViewController *enhanceVC = [[CSWCEnhanceViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:enhanceVC animated:YES];
-        }
-        // 处理界面净化点击
-        else if ([item.title isEqualToString:@"界面净化"]) {
-            CSUICleanViewController *cleanVC = [[CSUICleanViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:cleanVC animated:YES];
-        }
-        // 处理入口设置点击
-        else if ([item.title isEqualToString:@"入口设置"]) {
-            CSEntrySettingsViewController *entrySettingsVC = [[CSEntrySettingsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:entrySettingsVC animated:YES];
-        }
-        // 处理聊天按钮布局点击
-        else if ([item.title isEqualToString:@"附件布局"]) {
-            CSChatAttachmentSettingsViewController *chatAttachmentVC = [[CSChatAttachmentSettingsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:chatAttachmentVC animated:YES];
-        }
-        // 处理信息时间点击
-        else if ([item.title isEqualToString:@"信息时间"]) {
-            CSMessageTimeSettingsViewController *messageTimeVC = [[CSMessageTimeSettingsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:messageTimeVC animated:YES];
-        }
-        // 处理爱心文点击
-        else if ([item.title isEqualToString:@"文本占位"]) {
-            CSInputTextSettingsViewController *inputTextVC = [[CSInputTextSettingsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:inputTextVC animated:YES];
-        }
         // 处理淘口令跳转点击
         else if ([item.title isEqualToString:@"淘口令跳转"]) {
             CSTaobaoJumpViewController *taobaoJumpVC = [[CSTaobaoJumpViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
             [self.navigationController pushViewController:taobaoJumpVC animated:YES];
         }
-        // 处理版本控制点击
-        else if ([item.title isEqualToString:@"版本控制"]) {
-            CSVersionSettingsViewController *versionVC = [[CSVersionSettingsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:versionVC animated:YES];
-        }
-        // 处理热更新控制点击
-        else if ([item.title isEqualToString:@"更新控制"]) {
-            CSUpdateControlViewController *updateControlVC = [[CSUpdateControlViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            [self.navigationController pushViewController:updateControlVC animated:YES];
+        // 处理入口设置点击
+        else if ([item.title isEqualToString:@"入口设置"]) {
+            CSEntrySettingsViewController *entrySettingsVC = [[CSEntrySettingsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
+            [self.navigationController pushViewController:entrySettingsVC animated:YES];
         }
         // 处理重置设置点击
         else if ([item.title isEqualToString:@"重置设置"]) {
