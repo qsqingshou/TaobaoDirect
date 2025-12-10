@@ -7,7 +7,7 @@
 static NSString * const kWeiURL = @"http://wy.llua.cn";
 static NSString * const kWeiAID = @"11644";
 static NSString * const kWeiKEY = @"73758u537577i3t7";
-static NSString * const kRC4KEY = @"ElFlF870vDk88gef";
+static NSString * const kRC4KEY = @"PJ135DC28ki11644";
 static NSInteger const kDLCODE = 200;
 
 // 本地存储Key
