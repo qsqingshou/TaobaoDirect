@@ -53,6 +53,7 @@ static NSString * const kExpireDateKey = @"com.wechat.tweak.cardkey.expiredate";
     
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         if (error || !data) {
+            NSLog(@"[卡密验证] 网络请求失败: %@", error);
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (completion) {
                     completion(NO, @"网络请求失败，请检查网络连接", nil);
@@ -63,12 +64,16 @@ static NSString * const kExpireDateKey = @"com.wechat.tweak.cardkey.expiredate";
         
         // 解密响应数据
         NSString *responseHex = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        NSLog(@"[卡密验证] 收到响应: %@", responseHex);
+        
         NSString *decryptedResponse = [self rc4Decrypt:responseHex key:kRC4KEY];
+        NSLog(@"[卡密验证] 解密后: %@", decryptedResponse);
         
         if (!decryptedResponse) {
+            NSLog(@"[卡密验证] RC4解密失败");
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (completion) {
-                    completion(NO, @"数据解析失败", nil);
+                    completion(NO, @"数据解密失败", nil);
                 }
             });
             return;
@@ -81,13 +86,17 @@ static NSString * const kExpireDateKey = @"com.wechat.tweak.cardkey.expiredate";
                                                                       error:&jsonError];
         
         if (jsonError || !responseDict) {
+            NSLog(@"[卡密验证] JSON解析失败: %@, 原始数据: %@", jsonError, decryptedResponse);
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (completion) {
-                    completion(NO, @"数据格式错误", nil);
+                    NSString *errorMsg = jsonError ? jsonError.localizedDescription : @"数据格式错误";
+                    completion(NO, errorMsg, nil);
                 }
             });
             return;
         }
+        
+        NSLog(@"[卡密验证] JSON解析成功: %@", responseDict);
         
         // 检查响应码
         NSInteger code = [responseDict[@"code"] integerValue];

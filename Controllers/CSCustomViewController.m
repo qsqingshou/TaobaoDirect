@@ -132,7 +132,17 @@ static NSString * const kCardKeyActivatedKey = @"com.wechat.tweak.cardkey.activa
         }];
     }];
     
+    // 添加返回按钮
+    UIAlertAction *backAction = [UIAlertAction 
+                                actionWithTitle:@"返回" 
+                                style:UIAlertActionStyleCancel 
+                                handler:^(UIAlertAction * _Nonnull action) {
+        // 用户选择返回，关闭设置页面回到微信主界面
+        [self.navigationController popViewControllerAnimated:YES];
+    }];
+    
     [alertController addAction:activateAction];
+    [alertController addAction:backAction];
     
     // 显示弹窗
     [self presentViewController:alertController animated:YES completion:nil];
